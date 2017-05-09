@@ -1,0 +1,6 @@
+# Connection information for Oracle view of SAP equipment database
+# Update with appropriate connection values for your database
+user = 'oracle_user'
+password = 'oracle_password'
+tns = 'oracle_tns'
+schema = 'oracle_schema'

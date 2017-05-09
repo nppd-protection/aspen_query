@@ -1,0 +1,6 @@
+# Connection information for MSQL version of Aspen Database
+# Update with appropriate connection values for your database
+server = 'MyMSQLServer'
+user = 'aspen_readonly'
+password = 'my password'
+database = 'ASPEN_Database'
