@@ -6,7 +6,7 @@ import csv
 import xlsxwriter  # Documentation at https://xlsxwriter.readthedocs.io/
 import sys
 
-wb = xlsxwriter.Workbook('SAP-Aspen Relay Compare.xlsx')
+wb = xlsxwriter.Workbook('output/SAP-Aspen Relay Compare.xlsx')
 header_format = wb.add_format({'bold': True,
                                'text_wrap': True,
                                'align': 'center',
@@ -20,9 +20,9 @@ sap_sess = eqdb.get_orm_session()
 # aspen_location first, then sap_fl
 locations = list((l.id, l.sap_fl) for l in aspendb.get_all_subs())
 
-# check_field can be set to 'sap_eq_num' or 'district_num'
+# match_field can be set to 'sap_eq_num' or 'district_num'
 # 'sap_eq_num' seems to provide better matching results.
-check_field = 'sap_eq_num'
+match_field = 'sap_eq_num'
 
 
 def skip_none(field):
@@ -53,7 +53,7 @@ def aspen_data(eq, flag=None):
         data = []
     data.extend((eq.sap_eq_num,
                  eq.district_num,
-                 eq.sap_fl,
+                 eq.functional_location,
                  eq.device_num,
                  eq.relaytype,
                  eq.style_num,
@@ -153,8 +153,11 @@ for aspen_location, sap_fl in locations:
     sheet.cur_row = 0
     xl_set_formatting(sheet)
 
-    all_aspen = []
-    all_sap = []
+    # Dict of lists. Key is match field value, set to None if not valid.
+    # Each value is a list of devices with that key.
+    all_devices = {}
+    all_aspen = {}
+    all_sap = {}
     aspen_devices = set()
     sap_devices = set()
     no_aspen_data = []
@@ -164,23 +167,27 @@ for aspen_location, sap_fl in locations:
     for device_type in (aspendb.Relay, aspendb.RTU_Equipment):
         for eq in aspen_sess.query(device_type) \
                 .filter(device_type.locationid == aspen_location):
-            data = getattr(eq, check_field)
-            all_aspen.append(eq)
+            data = getattr(eq, match_field)
             if data is None or data is '':
-                no_aspen_data.append(eq)
-            else:
-                aspen_devices.add(data)
+                data = None
+            try:
+                all_aspen[data].append(eq)
+            except KeyError:
+                all_aspen[data] = []
+                all_aspen[data].append(eq)
 
     # SAP Database query list
     for device_type in eqdb.SAPEquipment.all_subclasses():
         for eq in sap_sess.query(device_type) \
                 .filter(device_type.functional_location.like(sap_fl + '%')):
-            data = getattr(eq, check_field)
-            all_sap.append(eq)
+            data = getattr(eq, match_field)
             if data is None or data is '':
-                no_sap_data.append(eq)
-            else:
-                sap_devices.add(data)
+                data = None
+            try:
+                all_sap[data].append(eq)
+            except KeyError:
+                all_sap[data] = []
+                all_sap[data].append(eq)
 
     # Print all rows from Aspen
     print('-' * 80)
@@ -189,11 +196,10 @@ for aspen_location, sap_fl in locations:
     xl_write(sheet, 'Devices found in Aspen')
     table_start = xl_write_header(sheet, fmt='Aspen', flag='Missing in SAP')
 
-    all_aspen.sort(key=lambda eq: getattr(eq, check_field))
-    for eq in all_aspen:
-        flag = 'X' if getattr(eq, check_field) not in sap_devices else ''
-        print_aspen_eq(eq, flag)
-        xl_write_eq(sheet, eq, fmt='Aspen', flag=flag)
+    for k in sorted(all_aspen.keys()):
+        for eq in all_aspen[k]:
+            flag = 'X' if k is None or k not in all_sap else ''
+            xl_write_eq(sheet, eq, fmt='Aspen', flag=flag)
     if sheet.cur_row - table_start[0] > 1:
         sheet.add_table(table_start[0], 0, sheet.cur_row - 1,
                         table_start[1] - 1,
@@ -202,7 +208,8 @@ for aspen_location, sap_fl in locations:
                                      for s in aspen_header()],
                          'style': 'Table Style Medium 2',
                          'name': aspen_location.replace(' ', '_').replace(
-                             '-', '_').replace('*', '_') + '_Aspen'})
+                             '-', '_').replace('*', '_').replace('&','_') +
+                                 '_Aspen'})
 
     # Print all rows from SAP
     print('-' * 80)
@@ -212,11 +219,11 @@ for aspen_location, sap_fl in locations:
     xl_write(sheet, 'Devices found in SAP')
     table_start = xl_write_header(sheet, fmt='SAP', flag='Missing in Aspen')
 
-    all_sap.sort(key=lambda eq: getattr(eq, check_field))
-    for eq in all_sap:
-        flag = 'X' if getattr(eq, check_field) not in aspen_devices else ''
-        print_sap_eq(eq, flag)
-        xl_write_eq(sheet, eq, fmt='SAP', flag=flag)
+    for k in sorted(all_sap.keys()):
+        for eq in all_sap[k]:
+            flag = 'X' if k is None or k not in all_aspen else ''
+            print_sap_eq(eq, flag)
+            xl_write_eq(sheet, eq, fmt='SAP', flag=flag)
     if sheet.cur_row - table_start[0] > 1:
         sheet.add_table(table_start[0], 0, sheet.cur_row - 1,
                         table_start[1] - 1,
@@ -225,7 +232,7 @@ for aspen_location, sap_fl in locations:
                                      for s in sap_header()],
                          'style': 'Table Style Medium 2',
                          'name': aspen_location.replace(' ', '_').replace(
-                             '-', '_').replace('*', '_') + '_SAP'})
+                             '-', '_').replace('*', '_').replace('&','_') + '_SAP'})
 
     print('')
 

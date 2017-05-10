@@ -100,7 +100,7 @@ class Relay(Base):
     relay_angle = Column('s10', String)
     ct_ratio = Column('s11', String)
     owner = Column('s19', String)
-    sap_fl = Column('s20', String)
+    functional_location = Column('s20', String)
     locationid = Column(String, ForeignKey('TLOCATION.id'))
     location = relationship('Location', back_populates='relays')
     requests = relationship('Request', order_by='Request.request_date',
@@ -171,7 +171,7 @@ class RTU_Equipment(Base):
     inst_book = Column('s04', String)
     ieee_num = Column('s05', String)
     owner = Column('s19', String)
-    sap_fl = Column('s20', String)
+    functional_location = Column('s20', String)
     locationid = Column(String, ForeignKey('TLOCATION.id'))
     location = relationship('Location', back_populates='rtu_equipment')
     requests = relationship('RTURequest', order_by='RTURequest.request_date',
