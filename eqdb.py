@@ -63,7 +63,7 @@ class SAPEquipment(Base):
     manufacturer = Column(String)
     model_number = Column(String)
     construction_year = Column(Integer)
-    manufacturer_serial_number = Column(String)
+    serial_num = Column('manufacturer_serial_number', String)
     district_num = Column('inventory_no', String)
     owner_identification = Column(String)
 
