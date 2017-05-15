@@ -40,7 +40,7 @@ def simple_connect_test(argv=None):
 import sqlalchemy
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, Float
+from sqlalchemy import Column, Integer, Unicode, Float
 from sqlalchemy.ext.hybrid import hybrid_property
 
 Base = declarative_base()
@@ -57,55 +57,55 @@ class SAPEquipment(Base):
 
     """ Common columns for all equipment tables. """
     sap_eq_num = Column('equipment_number', Integer, primary_key=True)
-    functional_location = Column(String)
+    functional_location = Column(Unicode)
     functional_location_description = Column(
-        'functional_location_descriptin', String)
-    manufacturer = Column(String)
-    model_number = Column(String)
+        'functional_location_descriptin', Unicode)
+    manufacturer = Column(Unicode)
+    model_number = Column(Unicode)
     construction_year = Column(Integer)
-    serial_num = Column('manufacturer_serial_number', String)
-    district_num = Column('inventory_no', String)
-    owner_identification = Column(String)
+    serial_num = Column('manufacturer_serial_number', Unicode)
+    district_num = Column('inventory_no', Unicode)
+    owner_identification = Column(Unicode)
 
     # pseudo columns to be over-ridden in child classes where available
-    @hybrid_property
-    def NPPD_device(self):
-        return ''
+    #@hybrid_property
+    #def NPPD_device(self):
+    #    return ''
 
 
-    @hybrid_property
-    def protecting(self):
-        return ''
+    #@hybrid_property
+    #def protecting(self):
+    #    return ''
 
-    @hybrid_property
-    def owner(self):
-        return ''
+    #@hybrid_property
+    #def owner(self):
+    #    return ''
 
 
 class Relay(SAPEquipment):
     __tablename__ = "equipment_prot_relay"
-    relay_type = Column('type', String)
-    NPPD_device = Column('nppd_ieee_device_number', String)
-    relay_function = Column(String)
-    protecting = Column(String)
-    nerc_critical = Column(String)
-    firmware = Column(String)
-    boot_firmware = Column(String)
-    panel = Column(String)
+    relay_type = Column('type', Unicode)
+    NPPD_device = Column('nppd_ieee_device_number', Unicode)
+    relay_function = Column(Unicode)
+    protecting = Column(Unicode)
+    nerc_critical = Column(Unicode)
+    firmware = Column(Unicode)
+    boot_firmware = Column(Unicode)
+    panel = Column(Unicode)
 
 
 class HMI_generic(SAPEquipment):
     __abstract__ = True
-    power_supply_voltage = Column(String)
-    hard_disk_1_type = Column(String)
-    hard_disk_1_brand = Column(String)
-    hard_disk_1_size = Column(String)
-    hard_disk_2_type = Column(String)
-    hard_disk_2_brand = Column(String)
-    hard_disk_2_size = Column(String)
-    system_memory_size = Column(String)
-    baseline = Column(String)
-    panel = Column(String)
+    power_supply_voltage = Column(Unicode)
+    hard_disk_1_type = Column(Unicode)
+    hard_disk_1_brand = Column(Unicode)
+    hard_disk_1_size = Column(Unicode)
+    hard_disk_2_type = Column(Unicode)
+    hard_disk_2_brand = Column(Unicode)
+    hard_disk_2_size = Column(Unicode)
+    system_memory_size = Column(Unicode)
+    baseline = Column(Unicode)
+    panel = Column(Unicode)
 
 
 class HMI(HMI_generic):
@@ -119,9 +119,9 @@ class Annunciator(HMI_generic):
 class Generic_CIP(SAPEquipment):
     __abstract__ = True
     sap_eq_num = Column('equipment', Integer, primary_key=True)
-    panel = Column(String)
-    firmware = Column(String)
-    patch_date = Column(String)
+    panel = Column(Unicode)
+    firmware = Column(Unicode)
+    patch_date = Column(Unicode)
 
 
 class GPS_Clock(Generic_CIP):
@@ -145,23 +145,23 @@ class Ethernet_Fiber_Converter(Generic_CIP):
 
 class IO_Terminal_Blocks(SAPEquipment):
     __tablename__ = "equipment_io_term_blks"
-    io_term_block_type = Column(String)
+    io_term_block_type = Column(Unicode)
     io_term_block_quantity = Column(Float)
-    panel = Column(String)
-    firmware = Column(String)
-    boot_firmware = Column(String)
+    panel = Column(Unicode)
+    firmware = Column(Unicode)
+    boot_firmware = Column(Unicode)
 
 
 class Comm_Interface(SAPEquipment):
     __tablename__ = "equipment_comm_interface"
-    rev_number = Column(String)
-    panel = Column(String)
-    firmware_1 = Column(String)
-    firmware_2 = Column(String)
-    firmware_3 = Column(String)
-    firmware_4 = Column(String)
-    firmware_5 = Column(String)
-    baseline = Column(String)
+    rev_number = Column(Unicode)
+    panel = Column(Unicode)
+    firmware_1 = Column(Unicode)
+    firmware_2 = Column(Unicode)
+    firmware_3 = Column(Unicode)
+    firmware_4 = Column(Unicode)
+    firmware_5 = Column(Unicode)
+    baseline = Column(Unicode)
 
 
 def get_orm_sessionmaker():
