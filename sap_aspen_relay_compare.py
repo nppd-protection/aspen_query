@@ -2,9 +2,14 @@ from __future__ import print_function, unicode_literals
 
 import eqdb
 import aspendb
-import csv, codecs, cStringIO  # Use UnicodeWriter code from https://docs.python.org/2/library/csv.html
+import csv  # Use UnicodeWriter from https://docs.python.org/2/library/csv.html
+import codecs
 import xlsxwriter  # Documentation at https://xlsxwriter.readthedocs.io/
-import io  # for using csv.writer to write to a string
+import io  # for using csv.writer to write to a string and UnicodeWriter class
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 
 wb = xlsxwriter.Workbook('output/SAP-Aspen Relay Compare.xlsx')
 
@@ -68,7 +73,10 @@ fields = [{'aspen_header': 'Missing from SAP',
 
 
 def skip_none(field):
-    return field if field is not None else ''
+    if field is None or isinstance(field, AttributeMissing):
+        return ''
+    else:
+        return field
 
 
 def xl_write(sheet, data, fmt=None):
@@ -108,7 +116,7 @@ class UnicodeWriter:
 
     def __init__(self, f, dialect=csv.excel, encoding="utf-8", **kwds):
         # Redirect output to a queue
-        self.queue = cStringIO.StringIO()
+        self.queue = StringIO()
         self.writer = csv.writer(self.queue, dialect=dialect, **kwds)
         self.stream = f
         self.encoder = codecs.getincrementalencoder(encoding)()
@@ -128,7 +136,21 @@ class UnicodeWriter:
             self.writerow(row)
 
 
-class Table:
+class AttributeMissing(object):
+    def __init__(self, attribute):
+        self.attribute = attribute
+
+    def __str__(self):
+        return ''
+
+    def __repr__(self):
+        return 'AttributeMissing(' + self.attribute + ')'
+
+    def __len__(self):
+        return 0
+
+
+class Table(object):
     def __init__(self, title, fields, fmt):
         self.title = title
         self.fields = fields
@@ -147,6 +169,7 @@ class Table:
                                             'align': 'center',
                                             'valign': 'bottom',
                                             'bottom': 1})
+        self.diff_format = wb.add_format({'bg_color': 'yellow'})
 
     def row_info(self, kind):
         data = []
@@ -158,10 +181,18 @@ class Table:
         return data
 
     def mk_row(self, eq):
+        """ If missing_attributes is True, then missing attributes are 
+            indicated with an AttributeMissing object, otherwise an empty string 
+            is used.
+        """
         fields = self.row_info('field')
         data = []
         for f in fields:
-            data.append(getattr(eq, f))
+            try:
+                data.append(getattr(eq, f))
+            except AttributeError:
+                # Flag missing attribute with AttributeMissing object
+                data.append(AttributeMissing(f))
         return data
 
     def mk_data_rows(self, eq_list):
@@ -170,6 +201,68 @@ class Table:
         for eq in eq_list:
             self.obj_list.append(eq)
             self.data.append(self.mk_row(eq))
+
+    def match_field(self):
+        """ Based on the fields set for the Table, return a tuple of the 
+            column number and column name set for matching.
+            If no column is set to match, returns None, None.
+        """
+        for n, field in enumerate(self.fields):
+            try:
+                if field['match']:
+                    return n, self.row_info('field')[n]
+            except KeyError:
+                continue
+        return None, None
+
+    def check_fields(self):
+        """ Based on the fields set for the Table, return a list of the 
+            column indices that are flagged with 'check': True.
+        """
+        rtn = []
+        for n, field in enumerate(self.fields):
+            try:
+                if field['check'] is True:
+                    rtn.append(n)
+            except KeyError:
+                continue
+        return rtn
+
+    ValuesMatch = object()
+
+    def data_diff(self, table2):
+        """ Compare data in this table against data from another table. The 
+        other table is assumed to also be a Table object and have compatible
+        column definitions. Rows will be matched based on the field with 
+        'match': True set. Only fields with 'check': True set will be compared.
+        The result is to set a list of lists the same dimensions as data that
+        holds a value None for not checked or no difference or the value of 
+        the other table if there is a difference.
+        """
+        match_n, match_field = self.match_field()
+        check_fields = self.check_fields()
+
+        # Make a cross-reference dict to look up match keys in table2
+        cross_ref = {}
+        for row2 in table2.data:
+            match_data = row2[match_n]
+            if not (match_data is None or match_data is ''):
+                cross_ref[match_data] = row2
+
+        # Iterate through data rows and look for differences
+        rtn = []
+        for row in self.data:
+            # Initialize diff list for row
+            row_diff = [Table.ValuesMatch]*len(row)
+            if row[match_n] in cross_ref:
+                row2 = cross_ref[row[match_n]]
+                for n in check_fields:
+                    if skip_none(row[n]) != skip_none(row2[n]) \
+                            and not isinstance(row[n], AttributeMissing) \
+                            and not isinstance(row2[n], AttributeMissing):
+                        row_diff[n] = row2[n]  # Save difference to diff list
+            rtn.append(row_diff)
+        return rtn
 
     def __str__(self):
             with io.StringIO() as out:
@@ -185,9 +278,12 @@ class Table:
                 rtn = out.getvalue()
             return rtn
 
-    def xl_write(self, sheet, style='Table Style Medium 2'):
+    def xl_write(self, sheet, style='Table Style Medium 2', diff=None):
         """ Writes table out to Excel sheet starting at current cursor row 
             position. Adds Excel table formatting if possible.
+            If diff is set to another Table, then differences against the 
+            other table will be highlighted and the other table's value 
+            indicated as a comment.
         """
         xl_write(sheet, self.title)
         self.header_row = sheet.cur_row  # Keep track or header row number
@@ -195,7 +291,9 @@ class Table:
         for row_data in self.data:
             # To hide row, use following code
             # sheet.set_row(sheet.cur_row, options={'hidden': True})
-            xl_write_row(sheet, row_data)
+            xl_row_data = [str(c) if isinstance(c, AttributeMissing) else c
+                           for c in row_data]
+            xl_write_row(sheet, xl_row_data)
 
         # Add Excel table if at least one data row is present
         if self.data:
@@ -207,6 +305,24 @@ class Table:
                              'style': style,
                              'name': xl_safe_tablename(aspen_location +
                                                        '_' + self.fmt)})
+
+        # Add diff highlighting
+        if diff is not None:
+            diff_table = self.data_diff(diff)
+            for row_n, diff_row in enumerate(diff_table):
+                for n, value2 in enumerate(diff_row):
+                    if value2 is Table.ValuesMatch:
+                        continue  # Skip matching values
+                    r = self.header_row + row_n + 1
+                    # Highlight cell
+                    # Have to re-write data to cell....
+                    sheet.write(r, n, skip_none(self.data[row_n][n]),
+                                self.diff_format)
+                    # Add comment
+                    if skip_none(value2) == '':
+                        value2 = '(blank)'
+                    sheet.write_comment(r, n, value2, {'y_scale': 0.33,
+                                                       'x_scale': 1.5})
 
 
 def xl_set_formatting(sheet):
@@ -224,7 +340,6 @@ for aspen_location, sap_fl in locations:
 
     # Dict of lists. Key is match field value, set to None if not valid.
     # Each value is a list of devices with that key.
-    all_devices = {}
     all_aspen = {}
     all_sap = {}
     no_aspen_data = []
@@ -263,28 +378,32 @@ for aspen_location, sap_fl in locations:
         for eq in all_aspen[k]:
             eq.flag = 'X' if k is None or k not in all_sap else ''
             table_eq_list.append(eq)
-
-    # Print all rows from Aspen
     aspen_table = Table('Devices found in Aspen', fields, 'aspen')
     aspen_table.mk_data_rows(table_eq_list)
-    print(aspen_table)
-    aspen_table.xl_write(sheet)
 
-    # Leave a blank row in the worksheet
-    sheet.cur_row += 1
-
-    # Set flags on SAP equipment list for what is missing in Aspen
+    # Set flags on SAP equipment list for what is missing in Aspen and make
+    # master list
     table_eq_list = []
     for k in sorted(all_sap.keys()):
         for eq in all_sap[k]:
             eq.flag = 'X' if k is None or k not in all_aspen else ''
             table_eq_list.append(eq)
-
-    # Print all rows from SAP
     sap_table = Table('Devices found in SAP', fields, 'sap')
     sap_table.mk_data_rows(table_eq_list)
+
+    # Calculate differences between Aspen and SAP tables
+    diff = aspen_table.data_diff(sap_table)
+
+    # Print all rows from Aspen
+    print(aspen_table)
+    aspen_table.xl_write(sheet, diff=sap_table)
+
+    # Leave a blank row in the worksheet
+    sheet.cur_row += 1
+
+    # Print all rows from SAP
     print(sap_table)
-    sap_table.xl_write(sheet)
+    sap_table.xl_write(sheet, diff=aspen_table)
 
     print('')
 
